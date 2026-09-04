@@ -1,9 +1,3 @@
-import streamlit as st
-import requests
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
-
-
 # ---------------------------------------------------------
 # 기본 설정
 # ---------------------------------------------------------
@@ -310,15 +304,4 @@ st.dataframe(
         "스크린수": st.column_config.NumberColumn(
             "스크린수",
             format="%d개",
-        ),
-    },
-)
-
-
-# ---------------------------------------------------------
-# 하단 안내
-# ---------------------------------------------------------
-
-st.caption(
-    "데이터 출처: 영화관입장권통합전산망(KOBIS) 일별 박스오피스 API"
-)
+    
