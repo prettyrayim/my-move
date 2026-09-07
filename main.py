@@ -303,7 +303,7 @@ with col3:
 
 
 # ==================================================
-# 13. 하트 그래프
+# 16. 관객수 상위 5편 하트 그래프
 # ==================================================
 
 st.subheader("💗 관객수 상위 5편")
@@ -313,7 +313,8 @@ st.caption(
 )
 
 
-# 관객수가 많은 순서로 5편
+# 관객수가 많은 순서대로 5편 선택
+
 top5 = (
     df.sort_values(
         "audiCnt",
@@ -324,29 +325,26 @@ top5 = (
 )
 
 
-# 하트 크기
-MIN_SIZE = 45
+# 하트 크기 설정
+MIN_SIZE = 40
 MAX_SIZE = 110
 
 max_audience = top5["audiCnt"].max()
 min_audience = top5["audiCnt"].min()
 
 
+# 상위 5편 표시
+
 for _, movie in top5.iterrows():
 
-    movie_name = str(movie["movieNm"])
+    movie_name_chart = movie["movieNm"]
 
-    audience = int(
+    movie_audience = int(
         movie["audiCnt"]
     )
 
 
-    # 영화 이름에 HTML 문자가 들어가도
-    # 화면에 안전하게 표시되도록 처리
-    safe_movie_name = escape(movie_name)
-
-
-    # 관객수에 따른 하트 크기 계산
+    # 관객수에 따라 하트 크기 계산
 
     if max_audience == min_audience:
 
@@ -354,66 +352,67 @@ for _, movie in top5.iterrows():
 
     else:
 
-        ratio = (
-            (audience - min_audience)
-            / (max_audience - min_audience)
-        )
-
         heart_size = (
             MIN_SIZE
-            + ratio * (MAX_SIZE - MIN_SIZE)
+            + (
+                (movie_audience - min_audience)
+                / (max_audience - min_audience)
+            )
+            * (MAX_SIZE - MIN_SIZE)
         )
 
 
-    # 하트 그래프 HTML
-    heart_html = f"""
-<div style="
-    display:flex;
-    align-items:center;
-    width:100%;
-    padding:15px 20px;
-    margin:10px 0;
-    border-radius:15px;
-    background-color:#FFF7FA;
-">
+    # HTML 만들기
+    # textwrap.dedent를 사용해서 앞쪽 공백 때문에
+    # 코드 블록으로 인식되는 문제를 방지합니다.
 
-    <div style="
-        width:240px;
-        font-size:18px;
-        font-weight:bold;
-        color:#333333;
-    ">
-        🎬 {safe_movie_name}
-    </div>
+    import textwrap
 
-    <div style="
-        width:150px;
-        text-align:center;
-        font-size:{heart_size}px;
-        line-height:1;
-        color:#FFC0CB;
-    ">
-        ♥
-    </div>
+    heart_html = textwrap.dedent(
+        f"""
+        <div style="
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            margin: 15px 0;
+            padding: 15px;
+            border-radius: 15px;
+            background-color: #FFF7FA;
+        ">
 
-    <div style="
-        font-size:16px;
-        color:#555555;
-        margin-left:10px;
-    ">
-        {audience:,}명
-    </div>
+            <div style="
+                width: 220px;
+                font-size: 18px;
+                font-weight: bold;
+            ">
+                🎬 {movie_name_chart}
+            </div>
 
-</div>
-"""
+            <div style="
+                font-size: {heart_size}px;
+                line-height: 1;
+                color: #FFC0CB;
+            ">
+                ♥
+            </div>
+
+            <div style="
+                font-size: 16px;
+                color: #555555;
+            ">
+                {movie_audience:,}명
+            </div>
+
+        </div>
+        """
+    )
 
 
-    # HTML로 출력
+    # HTML로 표시
     st.markdown(
         heart_html,
         unsafe_allow_html=True
     )
-
 
 # ==================================================
 # 14. 전체 박스오피스 표
