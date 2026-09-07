@@ -3,38 +3,32 @@ import requests
 import pandas as pd
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+from html import escape
 
 
 # ==================================================
-# 1. 화면 기본 설정
+# 1. 화면 설정
 # ==================================================
 
 st.set_page_config(
-    page_title="박스오피스 조회",
+    page_title="영화 박스오피스",
     page_icon="🎬",
     layout="wide"
 )
 
-st.title("🎬 영화 박스오피스 조회")
+st.title("🎬 영화 박스오피스")
 st.caption("영화관입장권통합전산망(KOBIS) 일일 박스오피스")
 
 
 # ==================================================
-# 2. 한국 시간 설정
+# 2. 한국 시간
 # ==================================================
-
-# Streamlit Cloud 서버 시간이 한국 시간이 아닐 수 있으므로
-# 서울 시간을 기준으로 날짜를 계산합니다.
 
 KST = ZoneInfo("Asia/Seoul")
 
-now_kst = datetime.now(KST)
+today = datetime.now(KST).date()
 
-today = now_kst.date()
-
-# 오늘은 아직 집계가 끝나지 않았으므로
-# 선택할 수 있는 가장 최근 날짜는 어제입니다.
-
+# 오늘은 아직 집계 전이므로 어제까지만 선택 가능
 yesterday = today - timedelta(days=1)
 
 
@@ -42,34 +36,30 @@ yesterday = today - timedelta(days=1)
 # 3. 날짜 선택
 # ==================================================
 
-st.subheader("📅 조회할 날짜를 선택하세요")
+st.subheader("📅 조회할 날짜")
 
 selected_date = st.date_input(
-    "날짜",
+    "박스오피스를 보고 싶은 날짜를 선택하세요.",
     value=yesterday,
     min_value=datetime(2000, 1, 1).date(),
     max_value=yesterday
 )
 
-
-# KOBIS API가 사용하는 날짜 형식
 target_date = selected_date.strftime("%Y%m%d")
 
-# 화면에 보여줄 날짜
 display_date = selected_date.strftime("%Y년 %m월 %d일")
 
 
 # ==================================================
-# 4. KOBIS API에서 데이터 가져오기
+# 4. KOBIS API 데이터 가져오기
 # ==================================================
 
 @st.cache_data(ttl=3600)
 def get_boxoffice(target_dt):
 
-    # Streamlit Secrets에 저장된 KOBIS API 키
+    # Streamlit Secrets에서 API 키 가져오기
     api_key = st.secrets["KOBIS_KEY"]
 
-    # KOBIS 일일 박스오피스 API 주소
     url = (
         "https://www.kobis.or.kr/"
         "kobisopenapi/webservice/rest/boxoffice/"
@@ -82,7 +72,6 @@ def get_boxoffice(target_dt):
     }
 
     try:
-
         response = requests.get(
             url,
             params=params,
@@ -97,6 +86,7 @@ def get_boxoffice(target_dt):
 
         return {
             "success": False,
+            "empty": False,
             "error": f"API 요청에 실패했습니다.\n{e}"
         }
 
@@ -104,14 +94,12 @@ def get_boxoffice(target_dt):
 
         return {
             "success": False,
-            "error": "API가 올바른 JSON 데이터를 보내지 않았습니다."
+            "empty": False,
+            "error": "API가 올바른 데이터를 보내지 않았습니다."
         }
 
 
-    # ==================================================
-    # 5. KOBIS API 오류 확인
-    # ==================================================
-
+    # KOBIS API 오류 확인
     if "faultInfo" in data:
 
         fault = data["faultInfo"]
@@ -128,23 +116,22 @@ def get_boxoffice(target_dt):
 
         return {
             "success": False,
+            "empty": False,
             "error": (
-                "KOBIS API 오류가 발생했습니다.\n\n"
+                f"KOBIS API 오류\n"
                 f"오류 코드: {fault_code}\n"
                 f"오류 내용: {fault_message}"
             )
         }
 
 
-    # ==================================================
-    # 6. 박스오피스 결과 확인
-    # ==================================================
-
+    # 박스오피스 결과 확인
     if "boxOfficeResult" not in data:
 
         return {
             "success": False,
-            "error": "API 응답에 boxOfficeResult가 없습니다."
+            "empty": False,
+            "error": "API 응답에 박스오피스 결과가 없습니다."
         }
 
 
@@ -154,39 +141,37 @@ def get_boxoffice(target_dt):
     )
 
 
-    # 영화 목록이 비어 있으면
-    # 아직 해당 날짜의 데이터가 집계되지 않은 것으로 안내합니다.
-
+    # 영화 목록이 비어 있는 경우
     if not movie_list:
 
         return {
             "success": False,
-            "empty": True
+            "empty": True,
+            "error": ""
         }
 
 
     return {
         "success": True,
+        "empty": False,
         "movies": movie_list
     }
 
 
 # ==================================================
-# 7. API 실행
+# 5. API 실행
 # ==================================================
 
 result = get_boxoffice(target_date)
 
 
 # ==================================================
-# 8. 데이터가 없는 경우
+# 6. 데이터가 없는 경우
 # ==================================================
 
-if result.get("empty", False):
+if result["empty"]:
 
-    st.warning(
-        "📭 그날은 아직 집계 전입니다."
-    )
+    st.warning("📭 그날은 아직 집계 전입니다.")
 
     st.info(
         "다른 날짜를 선택해 주세요."
@@ -196,7 +181,7 @@ if result.get("empty", False):
 
 
 # ==================================================
-# 9. API 오류가 발생한 경우
+# 7. API 오류
 # ==================================================
 
 if not result["success"]:
@@ -209,10 +194,10 @@ if not result["success"]:
         """
 다음 내용을 확인해 주세요.
 
-1. Streamlit Secrets에 `KOBIS_KEY`가 등록되어 있는지 확인
-2. KOBIS 인증키가 올바른지 확인
-3. KOBIS API 서버가 정상적으로 작동하는지 확인
-4. API 요청 제한이나 인터넷 연결에 문제가 없는지 확인
+• Streamlit Secrets에 KOBIS_KEY가 등록되어 있는지 확인
+• KOBIS API 인증키가 올바른지 확인
+• 인터넷 연결을 확인
+• KOBIS API 서버 상태를 확인
 """
     )
 
@@ -222,20 +207,17 @@ if not result["success"]:
 
 
 # ==================================================
-# 10. DataFrame 만들기
+# 8. DataFrame 만들기
 # ==================================================
 
-movies = result["movies"]
-
-df = pd.DataFrame(movies)
+df = pd.DataFrame(
+    result["movies"]
+)
 
 
 # ==================================================
-# 11. 숫자 데이터 변환
+# 9. 숫자로 변환
 # ==================================================
-
-# KOBIS API에서는 숫자도 문자열 형태로 보내기 때문에
-# 실제 숫자로 변환합니다.
 
 number_columns = [
     "rank",
@@ -254,10 +236,7 @@ for column in number_columns:
     ).fillna(0)
 
 
-# ==================================================
-# 12. 순위 기준 정렬
-# ==================================================
-
+# 순위순으로 정렬
 df = df.sort_values(
     "rank",
     ascending=True
@@ -265,37 +244,33 @@ df = df.sort_values(
 
 
 # ==================================================
-# 13. 선택한 날짜 표시
+# 10. 선택한 날짜 표시
 # ==================================================
 
 st.subheader(
     f"📅 {display_date} 박스오피스"
 )
 
-st.info(
-    f"{display_date}의 일일 박스오피스 데이터입니다."
-)
-
 
 # ==================================================
-# 14. 1위 영화 정보
+# 11. 1위 영화
 # ==================================================
 
 first_movie = df.iloc[0]
 
-movie_name = first_movie["movieNm"]
+first_movie_name = first_movie["movieNm"]
 
-audience = int(
+first_audience = int(
     first_movie["audiCnt"]
 )
 
-acc_audience = int(
+first_acc_audience = int(
     first_movie["audiAcc"]
 )
 
 
 # ==================================================
-# 15. 1위 영화 지표 카드
+# 12. 1위 영화 카드
 # ==================================================
 
 st.subheader("🏆 1위 영화")
@@ -307,7 +282,7 @@ with col1:
 
     st.metric(
         "🎬 영화",
-        movie_name
+        first_movie_name
     )
 
 
@@ -315,7 +290,7 @@ with col2:
 
     st.metric(
         "👥 해당 날짜 관객수",
-        f"{audience:,}명"
+        f"{first_audience:,}명"
     )
 
 
@@ -323,12 +298,12 @@ with col3:
 
     st.metric(
         "📊 누적 관객수",
-        f"{acc_audience:,}명"
+        f"{first_acc_audience:,}명"
     )
 
 
 # ==================================================
-# 16. 관객수 상위 5편 하트 그래프
+# 13. 하트 그래프
 # ==================================================
 
 st.subheader("💗 관객수 상위 5편")
@@ -338,8 +313,7 @@ st.caption(
 )
 
 
-# 관객수가 많은 순서대로 5편 선택
-
+# 관객수가 많은 순서로 5편
 top5 = (
     df.sort_values(
         "audiCnt",
@@ -350,29 +324,29 @@ top5 = (
 )
 
 
-# 하트 크기 설정
-
-MIN_SIZE = 35
+# 하트 크기
+MIN_SIZE = 45
 MAX_SIZE = 110
 
 max_audience = top5["audiCnt"].max()
 min_audience = top5["audiCnt"].min()
 
 
-# 상위 5편을 하나씩 표시
-
 for _, movie in top5.iterrows():
 
-    movie_name_chart = movie["movieNm"]
+    movie_name = str(movie["movieNm"])
 
-    movie_audience = int(
+    audience = int(
         movie["audiCnt"]
     )
 
 
-    # --------------------------------------------------
-    # 관객수에 따라 하트 크기 계산
-    # --------------------------------------------------
+    # 영화 이름에 HTML 문자가 들어가도
+    # 화면에 안전하게 표시되도록 처리
+    safe_movie_name = escape(movie_name)
+
+
+    # 관객수에 따른 하트 크기 계산
 
     if max_audience == min_audience:
 
@@ -380,70 +354,73 @@ for _, movie in top5.iterrows():
 
     else:
 
+        ratio = (
+            (audience - min_audience)
+            / (max_audience - min_audience)
+        )
+
         heart_size = (
             MIN_SIZE
-            + (
-                (movie_audience - min_audience)
-                / (max_audience - min_audience)
-            )
-            * (MAX_SIZE - MIN_SIZE)
+            + ratio * (MAX_SIZE - MIN_SIZE)
         )
 
 
-    # --------------------------------------------------
-    # 하트 표시
-    # --------------------------------------------------
+    # 하트 그래프 HTML
+    heart_html = f"""
+<div style="
+    display:flex;
+    align-items:center;
+    width:100%;
+    padding:15px 20px;
+    margin:10px 0;
+    border-radius:15px;
+    background-color:#FFF7FA;
+">
 
+    <div style="
+        width:240px;
+        font-size:18px;
+        font-weight:bold;
+        color:#333333;
+    ">
+        🎬 {safe_movie_name}
+    </div>
+
+    <div style="
+        width:150px;
+        text-align:center;
+        font-size:{heart_size}px;
+        line-height:1;
+        color:#FFC0CB;
+    ">
+        ♥
+    </div>
+
+    <div style="
+        font-size:16px;
+        color:#555555;
+        margin-left:10px;
+    ">
+        {audience:,}명
+    </div>
+
+</div>
+"""
+
+
+    # HTML로 출력
     st.markdown(
-        f"""
-        <div style="
-            display: flex;
-            align-items: center;
-            gap: 20px;
-            margin: 15px 0;
-            padding: 12px;
-            border-radius: 15px;
-            background-color: #FFF7FA;
-        ">
-
-            <div style="
-                width: 220px;
-                font-size: 18px;
-                font-weight: bold;
-            ">
-                🎬 {movie_name_chart}
-            </div>
-
-            <div style="
-                font-size: {heart_size}px;
-                line-height: 1;
-                color: #FFC0CB;
-                text-shadow: 1px 1px 2px #F5A9B8;
-            ">
-                ♥
-            </div>
-
-            <div style="
-                font-size: 16px;
-                color: #555555;
-            ">
-                {movie_audience:,}명
-            </div>
-
-        </div>
-        """,
+        heart_html,
         unsafe_allow_html=True
     )
 
 
 # ==================================================
-# 17. 전체 박스오피스 표
+# 14. 전체 박스오피스 표
 # ==================================================
 
 st.subheader("🎞️ 전체 박스오피스")
 
-
-# 표에 사용할 데이터 복사
 
 table_df = df[
     [
@@ -459,35 +436,33 @@ table_df = df[
 
 
 # ==================================================
-# 18. 영화명에 트로피 붙이기
+# 15. 영화명에 트로피 추가
 # ==================================================
 
-# 누적관객이 100만 명을 넘은 영화는
-# 영화명 옆에 트로피를 붙입니다.
+def add_trophy(row):
 
-def make_movie_name(row):
-
-    name = row["movieNm"]
+    movie_name = str(row["movieNm"])
 
     accumulated = int(
         row["audiAcc"]
     )
 
+    # 누적관객이 100만 명을 넘으면 트로피
     if accumulated > 1_000_000:
 
-        return f"🏆 {name}"
+        return f"🏆 {movie_name}"
 
-    return name
+    return movie_name
 
 
 table_df["movieNm"] = table_df.apply(
-    make_movie_name,
+    add_trophy,
     axis=1
 )
 
 
 # ==================================================
-# 19. 순위 증감 표시
+# 16. 순위 증감 표시
 # ==================================================
 
 def make_rank_change(value):
@@ -510,13 +485,15 @@ def make_rank_change(value):
         return "━"
 
 
-table_df["rankInten"] = table_df["rankInten"].apply(
+table_df["rankInten"] = table_df[
+    "rankInten"
+].apply(
     make_rank_change
 )
 
 
 # ==================================================
-# 20. 표 컬럼 이름 변경
+# 17. 표 이름을 한국어로 변경
 # ==================================================
 
 table_df.columns = [
@@ -531,24 +508,32 @@ table_df.columns = [
 
 
 # ==================================================
-# 21. 숫자에 천 단위 쉼표 넣기
+# 18. 숫자에 쉼표 넣기
 # ==================================================
 
-table_df["관객수"] = table_df["관객수"].map(
+table_df["관객수"] = table_df[
+    "관객수"
+].map(
     lambda x: f"{int(x):,}"
 )
 
-table_df["누적관객"] = table_df["누적관객"].map(
+
+table_df["누적관객"] = table_df[
+    "누적관객"
+].map(
     lambda x: f"{int(x):,}"
 )
 
-table_df["스크린수"] = table_df["스크린수"].map(
+
+table_df["스크린수"] = table_df[
+    "스크린수"
+].map(
     lambda x: f"{int(x):,}"
 )
 
 
 # ==================================================
-# 22. 표 출력
+# 19. 표 출력
 # ==================================================
 
 st.dataframe(
@@ -559,7 +544,7 @@ st.dataframe(
 
 
 # ==================================================
-# 23. 데이터 출처
+# 20. 출처
 # ==================================================
 
 st.caption(
